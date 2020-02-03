@@ -39,7 +39,7 @@ fn main() {
     println!("Created {} initial samples.", N_SAMPLES);
 
     for epoch in 1..N_EPOCHS + 1 {
-        samples.sort_unstable_by_key(|s| s.calc_fitness());
+        samples.sort_by_cached_key(|s| -1*s.calc_fitness() as i32);
         samples.reverse();
 
         let best_samples = &samples[0..N_BEST];

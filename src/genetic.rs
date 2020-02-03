@@ -16,18 +16,38 @@ pub trait GeneticSample<'a, D> {
 pub mod rgba {
     use super::GeneticSample;
     use image::RgbaImage;
+    use image::Pixel;
     use rand::distributions::Distribution;
+    use rand::Rng;
 
     pub struct RgbaApproximator<'a> {
         reference_img: &'a RgbaImage,
         triangles: Vec<[imageproc::drawing::Point<i32>; 3]>,
     }
 
+    impl RgbaApproximator<'_> {
+        fn random_triangle(img: &RgbaImage) -> [imageproc::drawing::Point<i32>; 3] {
+            let (w, h) = img.dimensions();
+            let mut rng = rand::thread_rng();
+            let mut ret = [imageproc::drawing::Point::<i32>::new(0,0); 3];
+            for p in &mut ret {
+                *p = imageproc::drawing::Point::<i32>::new(
+                        rng.gen_range(0, w-1) as i32,
+                        rng.gen_range(0, h-1) as i32);
+            }
+            while ret[0] == ret[1] || ret[1] == ret[2] || ret[0] == ret[2] {
+                ret = RgbaApproximator::random_triangle(&img);
+            }
+            return ret
+        }
+    }
+
     impl<'a> GeneticSample<'a, RgbaImage> for RgbaApproximator<'a> {
-        fn new_from_rng(data: &'a RgbaImage) -> RgbaApproximator<'a> {
+        fn new_from_rng(img: &'a RgbaImage) -> RgbaApproximator<'a> {
+            const N_INITIAL_TRIANGLES: usize = 50;
             RgbaApproximator {
-                reference_img: data,
-                triangles: [].to_vec(),
+                reference_img: img,
+                triangles: (0..N_INITIAL_TRIANGLES).map(|_| RgbaApproximator::random_triangle(img)).collect(),
             }
         }
 
@@ -35,7 +55,7 @@ pub mod rgba {
             let decider = rand::distributions::Bernoulli::new(p_mutate).unwrap();
             if decider.sample(&mut rand::thread_rng()) {
                 self.triangles
-                    .push([imageproc::drawing::Point::new(0, 0); 3]);
+                    .push(RgbaApproximator::random_triangle(&self.reference_img));
             }
         }
 
@@ -43,18 +63,46 @@ pub mod rgba {
             lhs: &RgbaApproximator<'b>,
             rhs: &RgbaApproximator,
         ) -> RgbaApproximator<'b> {
+            const P_USE_TRIANGLE: f64 = 0.5;
+            let decider = rand::distributions::Bernoulli::new(P_USE_TRIANGLE).unwrap();
+            let lhs_triangles = lhs
+                .triangles
+                .clone()
+                .into_iter()
+                .filter(|_| decider.sample(&mut rand::thread_rng()));
+
+            let rhs_triangles = rhs
+                .triangles
+                .clone()
+                .into_iter()
+                .filter(|_| decider.sample(&mut rand::thread_rng()));
+
             RgbaApproximator {
                 reference_img: &lhs.reference_img,
-                triangles: [
-                    lhs.triangles.clone().as_slice(),
-                    rhs.triangles.clone().as_slice(),
-                ]
-                .concat(),
+                triangles: lhs_triangles.chain(rhs_triangles).collect(),
             }
         }
 
         fn calc_fitness(&self) -> u32 {
-            self.triangles.len() as u32
+            /* use imageproc::integral_image::{integral_image, sum_image_pixels};
+             * let integral = integral_squared_image(&image);
+             * sum_image_pixels(&integral, 0, 0, w-1, h-1);
+             */
+            let (w, h) = self.reference_img.dimensions();
+            let mut triangle_image = image::RgbaImage::new(w,h);
+            for t in &self.triangles {
+                triangle_image = imageproc::drawing::draw_convex_polygon(&mut triangle_image, t, image::Pixel::from_channels(120, 120, 120, 120));
+            }
+            let lhs_iter = triangle_image.pixels();
+            let rhs_iter = self.reference_img.pixels();
+            let fitness: f64 = lhs_iter.zip(rhs_iter).map(|(lhs_pixel, rhs_pixel)| {
+                let lhs = lhs_pixel.channels();
+                let rhs = rhs_pixel.channels();
+                (lhs[0] as f64 * lhs[3] as f64/256. - rhs[0] as f64 * rhs[3] as f64/256.).powf(2.)
+            }).sum();
+
+            //self.triangles.len() as u32
+            return fitness as u32;
         }
     }
 }

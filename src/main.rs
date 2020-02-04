@@ -63,4 +63,17 @@ fn main() {
             samples[0].calc_fitness()
         );
     }
+
+    samples.sort_by_cached_key(|s| -1*s.calc_fitness() as i32);
+    samples.reverse();
+
+    let best_sample = &samples[0];
+    println!("Finally, the best sample reached {}.", best_sample.calc_fitness());
+
+    let (w, h) = reference_img.dimensions();
+    let mut triangle_image = image::RgbaImage::new(w,h);
+    for (t, p) in &best_sample.triangles {
+        triangle_image = genetic::rgba::draw_convex_polygon_with_blend(&mut triangle_image, t, *p);
+    }
+    triangle_image.save("bliss_compressed.jpg");
 }

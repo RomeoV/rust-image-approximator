@@ -15,30 +15,65 @@ pub trait GeneticSample<'a, D> {
 
 pub mod rgba {
     use super::GeneticSample;
-    use image::RgbaImage;
-    use image::Pixel;
+    use imageproc::definitions::Image;
+    use imageproc::drawing::{Blend, Point};
+    use image::{GenericImage, RgbaImage, ImageBuffer, Pixel};
     use rand::distributions::Distribution;
     use rand::Rng;
+    
+    // Reimplements method from imageproc::drawing but with blend
+    pub fn draw_convex_polygon_with_blend<I>(image: &I, poly: &[Point<i32>], color: I::Pixel) -> Image<I::Pixel>
+    where
+        I: GenericImage,
+        I::Pixel: 'static,
+    {
+        let mut out = ImageBuffer::new(image.width(), image.height());
+        out.copy_from(image, 0, 0);
+        let mut out_blend = Blend(out);
+        imageproc::drawing::draw_convex_polygon_mut(&mut out_blend, poly, color);
+        out_blend.0
+    }
 
     pub struct RgbaApproximator<'a> {
         reference_img: &'a RgbaImage,
-        triangles: Vec<[imageproc::drawing::Point<i32>; 3]>,
+        pub triangles: Vec<([imageproc::drawing::Point<i32>; 3], image::Rgba<u8>)>,
     }
 
     impl RgbaApproximator<'_> {
-        fn random_triangle(img: &RgbaImage) -> [imageproc::drawing::Point<i32>; 3] {
+        fn random_triangle(img: &RgbaImage) -> ([imageproc::drawing::Point<i32>; 3], image::Rgba<u8>) {
             let (w, h) = img.dimensions();
             let mut rng = rand::thread_rng();
             let mut ret = [imageproc::drawing::Point::<i32>::new(0,0); 3];
-            for p in &mut ret {
-                *p = imageproc::drawing::Point::<i32>::new(
-                        rng.gen_range(0, w-1) as i32,
-                        rng.gen_range(0, h-1) as i32);
-            }
+
+            // no two points are allowed to overlap
             while ret[0] == ret[1] || ret[1] == ret[2] || ret[0] == ret[2] {
-                ret = RgbaApproximator::random_triangle(&img);
+                let x = rng.gen_range(0, w-1) as i32;
+                let y = rng.gen_range(0, h-1) as i32;
+                ret[0] = imageproc::drawing::Point::<i32>::new(x, y);
+                ret[1] = imageproc::drawing::Point::<i32>::new(
+                    x + rng.gen_range(1, w/2) as i32,
+                    y + rng.gen_range(1, h/2) as i32
+                );
+                ret[2] = imageproc::drawing::Point::<i32>::new(
+                    x + rng.gen_range(1, w/2) as i32,
+                    y + rng.gen_range(1, h/2) as i32
+                );
+                /* for p in &mut ret {
+                    *p = imageproc::drawing::Point::<i32>::new(
+                            rng.gen_range(0, w-1) as i32,
+                            rng.gen_range(0, h-1) as i32);
+                    }
+                    */
             }
-            return ret
+
+            let color = image::Pixel::from_channels(
+                    rng.gen_range(0,255),
+                    rng.gen_range(0,255),
+                    rng.gen_range(0,255),
+                    rng.gen_range(0,255)
+            );
+
+            return (ret, color);
         }
     }
 
@@ -90,8 +125,8 @@ pub mod rgba {
              */
             let (w, h) = self.reference_img.dimensions();
             let mut triangle_image = image::RgbaImage::new(w,h);
-            for t in &self.triangles {
-                triangle_image = imageproc::drawing::draw_convex_polygon(&mut triangle_image, t, image::Pixel::from_channels(120, 120, 120, 120));
+            for (t, p) in &self.triangles {
+                triangle_image = draw_convex_polygon_with_blend(&mut triangle_image, t, *p);
             }
             let lhs_iter = triangle_image.pixels();
             let rhs_iter = self.reference_img.pixels();

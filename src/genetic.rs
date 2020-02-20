@@ -113,6 +113,7 @@ pub mod rgba {
             let p_shift = p_mutate;
             let p_resize = (p_mutate + 1.) / 2.;
             let p_rotate = p_mutate;
+            let p_swap = p_mutate;
             let p_change_r = (0. + 2. * p_mutate) / 3.;
             let p_change_g = (0. + 2. * p_mutate) / 3.;
             let p_change_b = (0. + 2. * p_mutate) / 3.;
@@ -122,7 +123,8 @@ pub mod rgba {
             let _decide_duplicate = Bernoulli::new(p_duplicate).unwrap();
             let decide_shift = Bernoulli::new(p_shift).unwrap();
             let decide_resize = Bernoulli::new(p_resize).unwrap();
-            let _decide_rotate = Bernoulli::new(p_rotate).unwrap();
+            let decide_rotate = Bernoulli::new(p_rotate).unwrap();
+            let decide_swap = Bernoulli::new(p_swap).unwrap();
             let _decide_change_r = Bernoulli::new(p_change_r).unwrap();
             let _decide_change_g = Bernoulli::new(p_change_g).unwrap();
             let _decide_change_b = Bernoulli::new(p_change_b).unwrap();
@@ -147,6 +149,29 @@ pub mod rgba {
                 .iter_mut()
                 .filter(|_| decide_shift.sample(&mut rng))
                 .for_each(|t| t.shift(img_dims));
+            
+            // rotate
+            self.triangles
+                .iter_mut()
+                .filter(|_| decide_rotate.sample(&mut rng))
+                .for_each(|t| t.rotate());
+
+            // swap triangle z layer
+            for i in 0..self.triangles.len()-2 {
+                if decide_swap.sample(&mut rng) {
+                    let j = rng.gen_range(i+1, i+6);
+                    if j < self.triangles.len() {
+                        self.triangles.swap(i, j);
+                    }
+                }
+            }
+
+            for Triangle(p, _) in &mut self.triangles {
+                if p[0] == p[1] || p[1] == p[2] || p[0] == p[2] {
+                    p[1].x += 1;
+                    p[2].y += 1;
+                }
+            }
         }
 
         fn combine_DNA<'b>(
@@ -169,7 +194,7 @@ pub mod rgba {
 
             RgbaApproximator {
                 reference_img: &lhs.reference_img,
-                triangles: lhs_triangles.chain(rhs_triangles).collect(),
+                triangles: lhs_triangles.zip(rhs_triangles).map(|(a, b)| vec![a, b].into_iter()).flatten().collect(),
             }
         }
 

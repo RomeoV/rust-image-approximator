@@ -29,7 +29,7 @@ use crate::genetic::triangle_ops::Triangle;
 fn main() {
     const N_SAMPLES: usize = 100;
     const N_BEST: usize = 20;
-    const N_EPOCHS: usize = 10;
+    const N_EPOCHS: usize = 30;
     const P_MUTATE: f64 = 0.3;
 
     let reference_img = image::open("bliss.png").unwrap().to_rgba();
@@ -76,5 +76,5 @@ fn main() {
     for Triangle(t, p) in &best_sample.triangles {
         triangle_image = genetic::rgba::draw_convex_polygon_with_blend(&mut triangle_image, t, *p);
     }
-    triangle_image.save("bliss_compressed.jpg");
+    triangle_image.save("bliss_compressed.jpg").unwrap();
 }
